@@ -2,7 +2,7 @@
 
 export PYTHONPATH="$(pwd)"
 
-python src/ptb/main.py \
+CUDA_VISIBLE_DEVICES=0 python src/ptb/main.py \
   --search_for="enas" \
   --noreset_output_dir \
   --data_path="data/ptb/ptb.pkl" \
