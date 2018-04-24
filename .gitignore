@@ -1,3 +1,6 @@
+# project related
+.flake8
+
 outputs*
 outputs/*
 *.swp
