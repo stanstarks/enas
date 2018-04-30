@@ -122,32 +122,7 @@ def get_ops(x_train, x_valid, x_test):
       lstm_l_skip=FLAGS.child_lstm_l_skip,
       vocab_size=10000,
       lr_init=FLAGS.child_lr,
-      lr_dec_start=FLAGS.child_lr_dec_start,
-      lr_dec_every=FLAGS.child_lr_dec_every,
-      lr_dec_rate=FLAGS.child_lr_dec_rate,
-      lr_dec_min=FLAGS.child_lr_dec_min,
-      lr_warmup_val=FLAGS.child_lr_warmup_val,
-      lr_warmup_steps=FLAGS.child_lr_warmup_steps,
-      l2_reg=FLAGS.child_l2_reg,
-      optim_moving_average=FLAGS.child_optim_moving_average,
-      clip_mode="global",
-      grad_bound=FLAGS.child_grad_bound,
-      optim_algo="sgd",
-      sync_replicas=FLAGS.child_sync_replicas,
-      num_aggregate=FLAGS.child_num_aggregate,
-      num_replicas=FLAGS.child_num_replicas,
-      temperature=FLAGS.child_temperature,
-      name="ptb_enas_model")
-
-    if FLAGS.child_fixed_arc is None:
-      controller_model = PTBEnasController(
-        rhn_depth=FLAGS.child_rhn_depth,
-        lstm_size=100,
-        lstm_num_layers=1,
-        lstm_keep_prob=1.0,
-        tanh_constant=FLAGS.controller_tanh_constant,
-        temperature=FLAGS.controller_temperature,
-        lr_init=FLAGS.controller_lr,
+      lr_dec_start=FLAGS.child_lr_dec_start
         lr_dec_start=0,
         lr_dec_every=1000000,  # never decrease learning rate
         l2_reg=FLAGS.controller_l2_reg,

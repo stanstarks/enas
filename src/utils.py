@@ -242,3 +242,8 @@ def get_train_ops(
   else:
     return train_op, learning_rate, grad_norm, opt
 
+
+  def log10(x):
+    numerator = tf.log(x)
+    denominator = tf.log(tf.constant(10, dtype=numerator.dtype))
+    return numerator / denominator
