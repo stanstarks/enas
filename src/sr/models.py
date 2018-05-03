@@ -13,15 +13,15 @@ from src.sr.image_ops import global_avg_pool
 
 from src.utils import count_model_params
 from src.utils import get_train_ops
+from random import randint
 
 
 class Model(object):
   def __init__(self,
-               inputs,
-               targets,
+               datasets,
                cutout_size=None,
                batch_size=32,
-               eval_batch_size=100,
+               eval_batch_size=50,
                clip_mode=None,
                grad_bound=None,
                l2_reg=1e-4,
@@ -64,87 +64,49 @@ class Model(object):
     self.seed = seed
     
     self.global_step = None
-    self.valid_acc = None
-    self.test_acc = None
+    self.valid_psnr = None
+    self.test_psnr = None
     print "Build data ops"
     with tf.device("/cpu:0"):
       # training data
-      self.num_train_examples = np.shape(inputs["train"])[0]
+      self.num_train_examples = 92165
       self.num_train_batches = (
         self.num_train_examples + self.batch_size - 1) // self.batch_size
-      x_train, y_train = tf.train.shuffle_batch(
-        [inputs["train"], targets["train"]],
-        batch_size=self.batch_size,
-        capacity=50000,
-        enqueue_many=True,
-        min_after_dequeue=0,
-        num_threads=16,
-        seed=self.seed,
-        allow_smaller_final_batch=True,
-      )
+
+      iterators = {}
+      datasets['train'] = datasets['train'].batch(batch_size=self.batch_size)
+      datasets['train'] = datasets['train'].prefetch(buffer_size=300)
+      iterators['train'] = datasets['train'].make_one_shot_iterator()
+      x_train, y_train = iterators['train'].get_next()
       self.lr_dec_every = lr_dec_every * self.num_train_batches
 
-      def _pre_process(x):
-        x = tf.pad(x, [[4, 4], [4, 4], [0, 0]])
-        x = tf.random_crop(x, [32, 32, 3], seed=self.seed)
-        x = tf.image.random_flip_left_right(x, seed=self.seed)
-        if self.cutout_size is not None:
-          mask = tf.ones([self.cutout_size, self.cutout_size], dtype=tf.int32)
-          start = tf.random_uniform([2], minval=0, maxval=32, dtype=tf.int32)
-          mask = tf.pad(mask, [[self.cutout_size + start[0], 32 - start[0]],
-                               [self.cutout_size + start[1], 32 - start[1]]])
-          mask = mask[self.cutout_size: self.cutout_size + 32,
-                      self.cutout_size: self.cutout_size + 32]
-          mask = tf.reshape(mask, [32, 32, 1])
-          mask = tf.tile(mask, [1, 1, 3])
-          x = tf.where(tf.equal(mask, 0), x=x, y=tf.zeros_like(x))
-        if self.data_format == "NCHW":
-          x = tf.transpose(x, [2, 0, 1])
-
-        return x
-      # self.x_train = tf.map_fn(_pre_process, x_train, back_prop=False)
       self.x_train = x_train
       self.y_train = y_train
 
       # valid data
       self.x_valid, self.y_valid = None, None
-      if inputs["valid"] is not None:
-        inputs["valid_original"] = np.copy(inputs["valid"])
-        targets["valid_original"] = np.copy(targets["valid"])
-        if self.data_format == "NCHW":
-          inputs["valid"] = tf.transpose(inputs["valid"], [0, 3, 1, 2])
-        self.num_valid_examples = np.shape(inputs["valid"])[0]
+      if datasets["valid"] is not None:
+        self.num_valid_examples = 20000
         self.num_valid_batches = (
           (self.num_valid_examples + self.eval_batch_size - 1)
           // self.eval_batch_size)
-        self.x_valid, self.y_valid = tf.train.batch(
-          [inputs["valid"], targets["valid"]],
-          batch_size=self.eval_batch_size,
-          capacity=5000,
-          enqueue_many=True,
-          num_threads=1,
-          allow_smaller_final_batch=True,
-        )
+        datasets['valid'] = datasets['valid'].batch(batch_size=self.eval_batch_size)
+        datasets['valid'] = datasets['valid'].prefetch(buffer_size=300)
+        iterators['valid'] = datasets['valid'].make_one_shot_iterator()
+        self.x_valid, self.y_valid = iterators['valid'].get_next()
 
       # test data
-      if self.data_format == "NCHW":
-        inputs["test"] = tf.transpose(inputs["test"], [0, 3, 1, 2])
-      self.num_test_examples = np.shape(inputs["test"])[0]
+      self.num_test_examples = 8000
       self.num_test_batches = (
         (self.num_test_examples + self.eval_batch_size - 1)
         // self.eval_batch_size)
-      self.x_test, self.y_test = tf.train.batch(
-        [inputs["test"], targets["test"]],
-        batch_size=self.eval_batch_size,
-        capacity=10000,
-        enqueue_many=True,
-        num_threads=1,
-        allow_smaller_final_batch=True,
-      )
-
+      datasets['test'] = datasets['test'].batch(batch_size=self.eval_batch_size)
+      datasets['test'] = datasets['test'].prefetch(buffer_size=300)
+      iterators['test'] = datasets['test'].make_one_shot_iterator()
+      self.x_test, self.y_test = iterators['test'].get_next()
     # cache inputs and targets
-    self.inputs = inputs
-    self.targets = targets
+    self.iterators = iterators
+    self.datasets = datasets
 
   def eval_once(self, sess, eval_set, feed_dict=None, verbose=False):
     """Expects self.acc and self.global_step to be defined.
@@ -185,6 +147,9 @@ class Model(object):
       print ""
     print "{}_psnr: {:<6.4f}".format(
       eval_set, float(total_acc) / total_exp)
+
+  def _model(self, inputs, is_training, reuse=None):
+    raise NotImplementedError("Abstract method")
 """
   def _build_train(self):
     print "Build train graph"
@@ -197,8 +162,7 @@ class Model(object):
     self.train_preds = tf.to_int32(self.train_preds)
     self.train_acc = tf.equal(self.train_preds, self.y_train)
     self.train_acc = tf.to_int32(self.train_acc)
-
-self.train_acc = tf.reduce_sum(self.train_acc)
+    self.train_acc = tf.reduce_sum(self.train_acc)
 
     tf_variables = [var
         for var in tf.trainable_variables() if var.name.startswith(self.name)]
@@ -285,5 +249,3 @@ self.train_acc = tf.reduce_sum(self.train_acc)
     self.valid_shuffle_acc = tf.to_int32(self.valid_shuffle_acc)
     self.valid_shuffle_acc = tf.reduce_sum(self.valid_shuffle_acc)
 """
-  def _model(self, inputs, is_training, reuse=None):
-    raise NotImplementedError("Abstract method")

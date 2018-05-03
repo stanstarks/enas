@@ -90,7 +90,9 @@ DEFINE_boolean("controller_use_critic", False, "")
 DEFINE_integer("log_every", 50, "How many steps to log")
 DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
 
-def get_ops(inputs, targets):
+tf.summary.FileWriterCache.clear()
+
+def get_ops(datasets):
   """
   Args:
     images: dict with keys {"train", "valid", "test"}.
@@ -107,8 +109,7 @@ def get_ops(inputs, targets):
     ChildClass = GeneralChild
 
   child_model = ChildClass(
-    inputs,
-    targets,
+    datasets,
     use_aux_heads=FLAGS.child_use_aux_heads,
     cutout_size=FLAGS.child_cutout_size,
     whole_channels=FLAGS.controller_search_whole_channels,
@@ -177,7 +178,7 @@ def get_ops(inputs, targets):
       "train_op": controller_model.train_op,
       "lr": controller_model.lr,
       "grad_norm": controller_model.grad_norm,
-      "valid_acc": controller_model.valid_acc,
+      "valid_psnr": controller_model.valid_psnr,
       "optimizer": controller_model.optimizer,
       "baseline": controller_model.baseline,
       "entropy": controller_model.sample_entropy,
@@ -196,9 +197,10 @@ def get_ops(inputs, targets):
     "train_op": child_model.train_op,
     "lr": child_model.lr,
     "grad_norm": child_model.grad_norm,
-    "train_acc": child_model.train_acc,
+    "train_psnr": child_model.train_psnr,
     "optimizer": child_model.optimizer,
     "num_train_batches": child_model.num_train_batches,
+    "summaries": child_model.summaries,
   }
 
   ops = {
@@ -214,13 +216,15 @@ def get_ops(inputs, targets):
 
 def train():
   if FLAGS.child_fixed_arc is None:
-    inputs, targets = read_data(FLAGS.data_path)
+    datasets = read_data(FLAGS.data_path)
   else:
-    inputs, targets = read_data(FLAGS.data_path, num_valids=0)
+    datasets = read_data(FLAGS.data_path, num_valids=0)
+
+  writer = tf.summary.FileWriter(FLAGS.output_dir)
 
   g = tf.Graph()
   with g.as_default():
-    ops = get_ops(inputs, targets)
+    ops = get_ops(datasets)
     child_ops = ops["child"]
     controller_ops = ops["controller"]
 
@@ -242,15 +246,16 @@ def train():
     with tf.train.SingularMonitoredSession(
       config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
+        writer.add_graph(sess.graph)
         while True:
           run_ops = [
             child_ops["loss"],
             child_ops["lr"],
             child_ops["grad_norm"],
-            child_ops["train_acc"],
+            child_ops["train_psnr"],
             child_ops["train_op"],
           ]
-          loss, lr, gn, tr_acc, _ = sess.run(run_ops)
+          loss, lr, gn, tr_psnr, _ = sess.run(run_ops)
           global_step = sess.run(child_ops["global_step"])
 
           if FLAGS.child_sync_replicas:
@@ -260,14 +265,15 @@ def train():
           epoch = actual_step // ops["num_train_batches"]
           curr_time = time.time()
           if global_step % FLAGS.log_every == 0:
+            summaries = sess.run(child_ops['summaries'])
+            writer.add_summary(summaries, global_step)
             log_string = ""
             log_string += "epoch={:<6d}".format(epoch)
             log_string += "ch_step={:<6d}".format(global_step)
             log_string += " loss={:<8.6f}".format(loss)
             log_string += " lr={:<8.4f}".format(lr)
             log_string += " |g|={:<8.4f}".format(gn)
-            log_string += " tr_acc={:<3d}/{:>3d}".format(
-                tr_acc, FLAGS.batch_size)
+            log_string += " tr_psnr={:<8.6f}".format(tr_psnr)
             log_string += " mins={:<10.2f}".format(
                 float(curr_time - start_time) / 60)
             print(log_string)
@@ -283,12 +289,12 @@ def train():
                   controller_ops["entropy"],
                   controller_ops["lr"],
                   controller_ops["grad_norm"],
-                  controller_ops["valid_acc"],
+                  controller_ops["valid_psnr"],
                   controller_ops["baseline"],
                   controller_ops["skip_rate"],
                   controller_ops["train_op"],
                 ]
-                loss, entropy, lr, gn, val_acc, bl, skip, _ = sess.run(run_ops)
+                loss, entropy, lr, gn, val_psnr, bl, skip, _ = sess.run(run_ops)
                 controller_step = sess.run(controller_ops["train_step"])
 
                 if ct_step % FLAGS.log_every == 0:
@@ -299,7 +305,7 @@ def train():
                   log_string += " ent={:<5.2f}".format(entropy)
                   log_string += " lr={:<6.4f}".format(lr)
                   log_string += " |g|={:<8.4f}".format(gn)
-                  log_string += " acc={:<6.4f}".format(val_acc)
+                  log_string += " psnr={:<6.4f}".format(val_psnr)
                   log_string += " bl={:<5.2f}".format(bl)
                   log_string += " mins={:<.2f}".format(
                       float(curr_time - start_time) / 60)
@@ -307,9 +313,9 @@ def train():
 
               print("Here are 10 architectures")
               for _ in range(10):
-                arc, acc = sess.run([
+                arc, psnr = sess.run([
                   controller_ops["sample_arc"],
-                  controller_ops["valid_acc"],
+                  controller_ops["valid_psnr"],
                 ])
                 if FLAGS.search_for == "micro":
                   normal_arc, reduce_arc = arc
@@ -324,7 +330,7 @@ def train():
                       end = start + 2 * FLAGS.child_num_branches + layer_id
                     print(np.reshape(arc[start: end], [-1]))
                     start = end
-                print("val_acc={:<6.4f}".format(acc))
+                print("val_psnr={:<6.4f}".format(psnr))
                 print("-" * 80)
 
             print("Epoch {}: Eval".format(epoch))

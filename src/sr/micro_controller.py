@@ -53,7 +53,7 @@ class MicroController(Controller):
     self.num_branches = num_branches
 
     self.lstm_size = lstm_size
-    self.lstm_num_layers = lstm_num_layers 
+    self.lstm_num_layers = lstm_num_layers
     self.lstm_keep_prob = lstm_keep_prob
     self.tanh_constant = tanh_constant
     self.op_tanh_reduce = op_tanh_reduce
@@ -230,9 +230,9 @@ class MicroController(Controller):
 
   def build_trainer(self, child_model):
     child_model.build_valid_rl()
-    self.valid_acc = (tf.to_float(child_model.valid_shuffle_acc) /
+    self.valid_psnr = (tf.to_float(child_model.valid_shuffle_psnr) /
                       tf.to_float(child_model.batch_size))
-    self.reward = self.valid_acc
+    self.reward = self.valid_psnr
 
     if self.entropy_weight is not None:
       self.reward += self.entropy_weight * self.sample_entropy

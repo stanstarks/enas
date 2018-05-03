@@ -13,7 +13,6 @@ from src.sr.image_ops import conv
 from src.sr.image_ops import fully_connected
 from src.sr.image_ops import batch_norm
 from src.sr.image_ops import batch_norm_with_mask
-from src.sr.image_ops import relu
 from src.sr.image_ops import max_pool
 from src.sr.image_ops import drop_path
 from src.sr.image_ops import global_avg_pool
@@ -26,8 +25,7 @@ from src.common_ops import create_weight
 
 class MicroChild(Model):
   def __init__(self,
-               inputs,
-               targets,
+               datasets,
                use_aux_heads=False,
                cutout_size=None,
                fixed_arc=None,
@@ -64,8 +62,7 @@ class MicroChild(Model):
     """
 
     super(self.__class__, self).__init__(
-      inputs,
-      targets,
+      datasets,
       cutout_size=cutout_size,
       batch_size=batch_size,
       clip_mode=clip_mode,
@@ -114,6 +111,7 @@ class MicroChild(Model):
 
     pool_distance = self.num_layers // 3
     self.pool_layers = [pool_distance, 2 * pool_distance + 1]
+    #self.pool_layers = []
 
     if self.use_aux_heads:
       self.aux_head_indices = [self.pool_layers[-1] + 1]
@@ -223,12 +221,12 @@ class MicroChild(Model):
       if hw[0] != hw[1]:
         assert hw[0] == 2 * hw[1]
         with tf.variable_scope("pool_x"):
-          x = tf.nn.relu(x)
+          #x = tf.nn.relu(x)
           x = self._factorized_reduction(x, out_filters, 2, is_training)
       elif c[0] != out_filters:
         with tf.variable_scope("pool_x"):
           w = create_weight("w", [1, 1, c[0], out_filters])
-          x = tf.nn.relu(x)
+          #x = tf.nn.relu(x)
           x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                            data_format=self.data_format)
           x = batch_norm(x, is_training, data_format=self.data_format)
@@ -237,13 +235,13 @@ class MicroChild(Model):
       if c[1] != out_filters:
         with tf.variable_scope("pool_y"):
           w = create_weight("w", [1, 1, c[1], out_filters])
-          y = tf.nn.relu(y)
+          #y = tf.nn.relu(y)
           y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                            data_format=self.data_format)
           y = batch_norm(y, is_training, data_format=self.data_format)
     return [x, y]
 
-  def _model(self, inputs, is_training, reuse=False):
+  def _model(self, x, is_training, reuse=False):
     """Compute the logits given the inputs."""
 
     if self.fixed_arc is None:
@@ -252,11 +250,11 @@ class MicroChild(Model):
     with tf.variable_scope(self.name, reuse=reuse):
       # the first two inputs
       with tf.variable_scope("stem_conv"):
-        w = create_weight("w", [3, 3, 3, self.out_filters * 3])
+        w = create_weight("w", [3, 3, 3, self.out_filters])
         x = tf.nn.conv2d(
-          inputs, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-        x = batch_norm(x, is_training, data_format=self.data_format)
-      if self.data_format == "NHCW":
+          x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
+        #x = batch_norm(x, is_training, data_format=self.data_format)
+      if self.data_format == "NHWC":
         split_axis = 3
       elif self.data_format == "NCHW":
         split_axis = 1
@@ -278,16 +276,16 @@ class MicroChild(Model):
                 layer_id, layers, self.normal_arc, out_filters, 1, is_training,
                 normal_or_reduction_cell="normal")
           else:
-            out_filters *= 2
+            #out_filters *= 2
             if self.fixed_arc is None:
-              x = self._factorized_reduction(x, out_filters, 2, is_training)
+              #x = self._factorized_reduction(x, out_filters, 2, is_training)
               layers = [layers[-1], x]
               x = self._enas_layer(
                 layer_id, layers, self.reduce_arc, out_filters)
             else:
               x = self._fixed_layer(
                 layer_id, layers, self.reduce_arc, out_filters, 2, is_training,
-                normal_or_reduction_cell="reduction")
+                normal_or_reduction_cell="normal")
           print("Layer {0:>2d}: {1}".format(layer_id, x))
           layers = [layers[-1], x]
 
@@ -315,7 +313,8 @@ class MicroChild(Model):
         x = tf.nn.conv2d(
           x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
         # scale to [0, 255]
-        x = tf.clip_by_value(x * self.std + self.mean, 0, 255)
+        #x = tf.clip_by_value(x * self.std + self.mean, 0, 255)
+        #x = x * self.std + self.mean
     return x
 
   def _fixed_conv(self, x, f_size, out_filters, stride, is_training,
@@ -336,7 +335,7 @@ class MicroChild(Model):
       with tf.variable_scope("sep_conv_{}".format(conv_id)):
         w_depthwise = create_weight("w_depth", [f_size, f_size, inp_c, 1])
         w_pointwise = create_weight("w_point", [1, 1, inp_c, out_filters])
-        x = tf.nn.relu(x)
+        #x = tf.nn.relu(x)
         x = tf.nn.separable_conv2d(
           x,
           depthwise_filter=w_depthwise,
@@ -397,7 +396,7 @@ class MicroChild(Model):
       x = layers[1]
       inp_c = self._get_C(x)
       w = create_weight("w", [1, 1, inp_c, out_filters])
-      x = tf.nn.relu(x)
+      #x = tf.nn.relu(x)
       x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                        data_format=self.data_format)
       x = batch_norm(x, is_training, data_format=self.data_format)
@@ -428,7 +427,7 @@ class MicroChild(Model):
                 data_format=self.actual_data_format)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              x = tf.nn.relu(x)
+              #x = tf.nn.relu(x)
               x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               x = batch_norm(x, is_training, data_format=self.data_format)
@@ -439,7 +438,7 @@ class MicroChild(Model):
               x = self._factorized_reduction(x, out_filters, 2, is_training)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              x = tf.nn.relu(x)
+              #x = tf.nn.relu(x)
               x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
               x = batch_norm(x, is_training, data_format=self.data_format)
           if (x_op in [0, 1, 2, 3] and
@@ -468,7 +467,7 @@ class MicroChild(Model):
                 data_format=self.actual_data_format)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              y = tf.nn.relu(y)
+              #y = tf.nn.relu(y)
               y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               y = batch_norm(y, is_training, data_format=self.data_format)
@@ -479,7 +478,7 @@ class MicroChild(Model):
               y = self._factorized_reduction(y, out_filters, 2, is_training)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              y = tf.nn.relu(y)
+              #y = tf.nn.relu(y)
               y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               y = batch_norm(y, is_training, data_format=self.data_format)
@@ -511,7 +510,7 @@ class MicroChild(Model):
             "w", [num_possible_inputs, avg_pool_c * out_filters])
           w = w[prev_cell]
           w = tf.reshape(w, [1, 1, avg_pool_c, out_filters])
-          avg_pool = tf.nn.relu(avg_pool)
+          #avg_pool = tf.nn.relu(avg_pool)
           avg_pool = tf.nn.conv2d(avg_pool, w, strides=[1, 1, 1, 1],
                                   padding="SAME", data_format=self.data_format)
           avg_pool = batch_norm(avg_pool, is_training=True,
@@ -527,7 +526,7 @@ class MicroChild(Model):
             "w", [num_possible_inputs, max_pool_c * out_filters])
           w = w[prev_cell]
           w = tf.reshape(w, [1, 1, max_pool_c, out_filters])
-          max_pool = tf.nn.relu(max_pool)
+          #max_pool = tf.nn.relu(max_pool)
           max_pool = tf.nn.conv2d(max_pool, w, strides=[1, 1, 1, 1],
                                   padding="SAME", data_format=self.data_format)
           max_pool = batch_norm(max_pool, is_training=True,
@@ -539,7 +538,7 @@ class MicroChild(Model):
         w = create_weight("w", [num_possible_inputs, x_c * out_filters])
         w = w[prev_cell]
         w = tf.reshape(w, [1, 1, x_c, out_filters])
-        x = tf.nn.relu(x)
+        #x = tf.nn.relu(x)
         x = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME",
                          data_format=self.data_format)
         x = batch_norm(x, is_training=True, data_format=self.data_format)
@@ -590,7 +589,7 @@ class MicroChild(Model):
             scale = scale[prev_cell]
 
           # the computations
-          x = tf.nn.relu(x)
+          #x = tf.nn.relu(x)
           x = tf.nn.separable_conv2d(
             x,
             depthwise_filter=w_depthwise,
@@ -666,7 +665,7 @@ class MicroChild(Model):
       w = create_weight("w", [self.num_cells + 2, out_filters * out_filters])
       w = tf.gather(w, indices, axis=0)
       w = tf.reshape(w, [1, 1, num_outs * out_filters, out_filters])
-      out = tf.nn.relu(out)
+      #out = tf.nn.relu(out)
       out = tf.nn.conv2d(out, w, strides=[1, 1, 1, 1], padding="SAME",
                          data_format=self.data_format)
       out = batch_norm(out, is_training=True, data_format=self.data_format)
@@ -680,14 +679,23 @@ class MicroChild(Model):
     print("-" * 80)
     print("Build train graph")
     output = self._model(self.x_train, is_training=True)
+    target = (self.y_train - 127) / 127
     self.loss = tf.reduce_mean(
-      tf.losses.absolute_difference(self.y_train, output))
+      tf.losses.absolute_difference(target, output))
 
     train_loss = self.loss
 
+    output = output * 127 + 127
     mse = tf.reduce_mean(tf.squared_difference(self.y_train, output))
     self.train_psnr = tf.constant(255**2, dtype=tf.float32) / mse
     self.train_psnr = tf.constant(10, dtype=tf.float32) / log10(self.train_psnr)
+
+    tf.summary.scalar('loss', self.loss)
+    output = tf.clip_by_value(output, 0, 255)
+    tf.summary.image("output_image", tf.cast(output, tf.uint8))
+    tf.summary.image("target_image", tf.cast(self.y_train, tf.uint8))
+    tf.summary.image("input_image", tf.cast(self.x_train*127 + 127, tf.uint8))
+    self.summaries = tf.summary.merge_all()
 
     tf_variables = [
       var for var in tf.trainable_variables() if (
@@ -746,30 +754,11 @@ class MicroChild(Model):
       if not shuffle and self.data_format == "NCHW":
         self.inputs["valid_original"] = np.transpose(
           self.inputs["valid_original"], [0, 3, 1, 2])
-      x_valid_shuffle, y_valid_shuffle = tf.train.shuffle_batch(
-        [self.inputs["valid_original"], self.targets["valid_original"]],
-        batch_size=self.batch_size,
-        capacity=25000,
-        enqueue_many=True,
-        min_after_dequeue=0,
-        num_threads=16,
-        seed=self.seed,
-        allow_smaller_final_batch=True,
-      )
-
-      def _pre_process(x):
-        x = tf.pad(x, [[4, 4], [4, 4], [0, 0]])
-        x = tf.random_crop(x, [32, 32, 3], seed=self.seed)
-        x = tf.image.random_flip_left_right(x, seed=self.seed)
-        if self.data_format == "NCHW":
-          x = tf.transpose(x, [2, 0, 1])
-        return x
-
-      if shuffle:
-        x_valid_shuffle = tf.map_fn(
-          _pre_process, x_valid_shuffle, back_prop=False)
+      self.iterators['valid_shuffle'] = self.datasets['valid'].make_one_shot_iterator()
+      x_valid_shuffle, y_valid_shuffle = self.iterators['valid_shuffle'].get_next()
 
     output = self._model(x_valid_shuffle, is_training=True, reuse=True)
+
     mse = tf.reduce_mean(tf.squared_difference(self.y_test, output))
     self.valid_shuffle_psnr = tf.constant(255**2, dtype=tf.float32) / mse
     self.valid_shuffle_psnr = tf.constant(10, dtype=tf.float32) / log10(self.valid_shuffle_psnr)

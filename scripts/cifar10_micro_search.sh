@@ -2,12 +2,12 @@
 
 export PYTHONPATH="$(pwd)"
 
-python src/cifar10/main.py \
+CUDA_VISIBLE_DEVICES=1 python src/cifar10/main.py \
   --data_format="NCHW" \
   --search_for="micro" \
   --reset_output_dir \
   --data_path="data/cifar10" \
-  --output_dir="outputs" \
+  --output_dir="micro_search" \
   --batch_size=160 \
   --num_epochs=150 \
   --log_every=50 \

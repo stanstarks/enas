@@ -1,5 +1,6 @@
 # project related
 .flake8
+data/*
 
 outputs*
 outputs/*
