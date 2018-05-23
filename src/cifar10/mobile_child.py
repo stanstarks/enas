@@ -567,10 +567,12 @@ class MobileChild(Model):
 
     out = [
       self._enas_conv(x, curr_cell, prev_cell, 3, out_filters),
+      self._enas_conv(x, curr_cell, prev_cell, 3, out_filters, variable_scope='1'),
       self._enas_conv(x, curr_cell, prev_cell, 5, out_filters),
       avg_pool,
       max_pool,
       x,
+      tf.fill(tf.shape(x), 0.0)
     ]
 
     out = tf.stack(out, axis=0)
@@ -578,10 +580,10 @@ class MobileChild(Model):
     return out
 
   def _enas_conv(self, x, curr_cell, prev_cell, filter_size, out_filters,
-                 stack_conv=2):
+                 stack_conv=2, variable_scope='0'):
     """Performs an enas convolution specified by the relevant parameters."""
 
-    with tf.variable_scope("conv_{0}x{0}".format(filter_size)):
+    with tf.variable_scope("conv_{0}x{0}_{1}".format((filter_size, variable_scope))):
       num_possible_inputs = curr_cell + 2
       for conv_id in range(stack_conv):
         with tf.variable_scope("stack_{0}".format(conv_id)):
