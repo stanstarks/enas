@@ -2,11 +2,11 @@
 
 export PYTHONPATH="$(pwd)"
 
-CUDA_VISIBLE_DEVICES=0 python src/sr/main.py \
+CUDA_VISIBLE_DEVICES=3 python src/sr/main.py \
   --data_format="NHWC" \
-  --search_for="micro" \
+  --search_for="residual" \
   --data_path="data/sr" \
-  --output_dir="outputs/sr_micro" \
+  --output_dir="outputs/sr_residual" \
   --batch_size=40 \
   --num_epochs=15000 \
   --log_every=50 \
@@ -22,7 +22,7 @@ CUDA_VISIBLE_DEVICES=0 python src/sr/main.py \
   --child_lr_dec_every=10000 \
   --child_lr_max=0.01 \
   --child_lr_min=0.00001 \
-  --child_lr_T_0=40 \
+  --child_lr_T_0=20 \
   --child_lr_T_mul=2 \
   --controller_training \
   --controller_search_whole_channels \
@@ -30,8 +30,8 @@ CUDA_VISIBLE_DEVICES=0 python src/sr/main.py \
   --controller_train_every=1 \
   --controller_sync_replicas \
   --controller_num_aggregate=10 \
-  --controller_train_steps=50 \
-  --controller_lr=0.0001 \
+  --controller_train_steps=100 \
+  --controller_lr=0.00001 \
   --controller_tanh_constant=2.5 \
   --controller_op_tanh_reduce=1 \
   "$@"

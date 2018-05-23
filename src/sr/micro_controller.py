@@ -230,9 +230,8 @@ class MicroController(Controller):
 
   def build_trainer(self, child_model):
     child_model.build_valid_rl()
-    self.valid_psnr = (tf.to_float(child_model.valid_shuffle_psnr) /
-                      tf.to_float(child_model.batch_size))
-    self.reward = self.valid_psnr
+    self.valid_psnr = child_model.valid_shuffle_psnr
+    self.reward = self.valid_psnr / 10
 
     if self.entropy_weight is not None:
       self.reward += self.entropy_weight * self.sample_entropy

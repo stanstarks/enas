@@ -16,14 +16,13 @@ from src.sr.image_ops import batch_norm_with_mask
 from src.sr.image_ops import max_pool
 from src.sr.image_ops import drop_path
 from src.sr.image_ops import global_avg_pool
-from src.sr.image_ops import pixel_shuffler
 
 from src.utils import count_model_params
 from src.utils import get_train_ops
 from src.utils import psnr
 from src.common_ops import create_weight
 
-class MicroChild(Model):
+class PyramidChild(Model):
   def __init__(self,
                datasets,
                use_aux_heads=False,
@@ -115,6 +114,17 @@ class MicroChild(Model):
 
     if self.use_aux_heads:
       self.aux_head_indices = [self.pool_layers[-1] + 1]
+
+  def _upsampler(self, x, out_filters):
+    with tf.variable_scope('deconv'):
+      in_shape = tf.shape(x)
+      h = in_shape[1] * 2
+      w = in_shape[2] * 2
+      output_shape = [in_shape[0], h, w, out_filters]
+      w = create_weight('w', [3, 3, out_filters, out_filters*4])
+      x = tf.nn.conv2d_transpose(x, w, output_shape, [1, 2, 2, 1],
+                                 padding='SAME', data_format=self.data_format)
+      return x
 
   def _factorized_reduction(self, x, out_filters, stride, is_training):
     """Reduces the shape of x without information loss due to striding."""
@@ -213,24 +223,15 @@ class MicroChild(Model):
   def _maybe_calibrate_size(self, layers, out_filters, is_training):
     """Makes sure layers[0] and layers[1] have the same shapes."""
 
-    hw = [self._get_HW(layer) for layer in layers]
+    #hw = [self._get_HW(layer) for layer in layers]
     c = [self._get_C(layer) for layer in layers]
+    print(c)
 
     with tf.variable_scope("calibrate"):
       x = layers[0]
-      if hw[0] != hw[1]:
-        assert hw[0] == 2 * hw[1]
-        with tf.variable_scope("pool_x"):
-          #x = tf.nn.relu(x)
-          x = self._factorized_reduction(x, out_filters, 2, is_training)
-      elif c[0] != out_filters:
-        with tf.variable_scope("pool_x"):
-          w = create_weight("w", [1, 1, c[0], out_filters])
-          #x = tf.nn.relu(x)
-          x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
-                           data_format=self.data_format)
-          x = batch_norm(x, is_training, data_format=self.data_format)
-
+      if c[0] != out_filters:
+        with tf.variable_scope("shuffle_x"):
+          x = self._upsampler(x)
       y = layers[1]
       if c[1] != out_filters:
         with tf.variable_scope("pool_y"):
@@ -276,10 +277,14 @@ class MicroChild(Model):
                 layer_id, layers, self.normal_arc, out_filters, 1, is_training,
                 normal_or_reduction_cell="normal")
           else:
-            #out_filters *= 2
+            out_filters //= 4
+            with tf.variable_scope('x_up'):
+              x = self._upsampler(x, out_filters)
             if self.fixed_arc is None:
               #x = self._factorized_reduction(x, out_filters, 2, is_training)
-              layers = [layers[-1], x]
+              with tf.variable_scope('y_up'):
+                y = self._upsampler(layers[-1], out_filters)
+              layers = [y, x]
               x = self._enas_layer(
                 layer_id, layers, self.reduce_arc, out_filters)
             else:
@@ -294,19 +299,12 @@ class MicroChild(Model):
         x = tf.nn.conv2d(
           x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
         x = batch_norm(x, is_training, data_format=self.data_format)
+
+      with tf.variable_scope('stem_up_1'):
+        stem_out = self._upsampler(stem_out, out_filters * 4)
+      with tf.variable_scope('stem_up_2'):
+        stem_out = self._upsampler(stem_out, out_filters)
       x = x + stem_out
-
-      with tf.variable_scope("upsample_1"):
-        w = create_weight("w", [3, 3, out_filters, out_filters * 4])
-        x = tf.nn.conv2d(
-          x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-        x = pixel_shuffler(x)
-
-      with tf.variable_scope("upsample_2"):
-        w = create_weight("w", [3, 3, out_filters, out_filters * 4])
-        x = tf.nn.conv2d(
-          x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-        x = pixel_shuffler(x)
 
       with tf.variable_scope("output"):
         w = create_weight("w", [3, 3, out_filters, 3])
@@ -366,6 +364,9 @@ class MicroChild(Model):
             assert hw == out_hw * 2, ("i_hw={0} != {1}=o_hw".format(hw, out_hw))
             with tf.variable_scope("calibrate_{0}".format(i)):
               x = self._factorized_reduction(layer, out_filters, 2, is_training)
+          elif hw < out_hw:
+            assert hw == out_hw / 2, ("i_hw={0} != {1}=o_hw".format(hw, out_hw))
+            x = self._upsampler(layer)
           else:
             x = layer
           out.append(x)
@@ -689,12 +690,10 @@ class MicroChild(Model):
     tf.summary.scalar('loss', self.loss)
     output = output * 127 + 127
     output = tf.clip_by_value(output, 0, 255)
-    input_img = self.x_train*127 + 127
-    bicubic_img = tf.image.resize_bicubic(input_img, [128, 128])
-    tf.summary.image("output", tf.cast(output, tf.uint8))
-    tf.summary.image("target", tf.cast(self.y_train, tf.uint8))
-    tf.summary.image("input", tf.cast(input_img, tf.uint8))
-    tf.summary.image("bicubic", tf.cast(bicubic_img, tf.uint8))
+    tf.summary.image("output_image", tf.cast(output, tf.uint8))
+    tf.summary.image("target_image", tf.cast(self.y_train, tf.uint8))
+    tf.summary.image("input_image", tf.cast(self.x_train*127 + 127, tf.uint8))
+    self.summaries = tf.summary.merge_all()
 
     tf_variables = [
       var for var in tf.trainable_variables() if (
@@ -724,9 +723,6 @@ class MicroChild(Model):
       num_aggregate=self.num_aggregate,
       num_replicas=self.num_replicas)
 
-    tf.summary.scalar('lr', self.lr)
-    self.summaries = tf.summary.merge_all()
-
   # override
   def _build_valid(self):
     if self.x_valid is not None:
@@ -749,13 +745,14 @@ class MicroChild(Model):
     print("Build valid graph on shuffled data")
     with tf.device("/cpu:0"):
       # shuffled valid data: for choosing validation model
+      if not shuffle and self.data_format == "NCHW":
+        self.inputs["valid_original"] = np.transpose(
+          self.inputs["valid_original"], [0, 3, 1, 2])
       self.iterators['valid_shuffle'] = self.datasets['valid'].make_one_shot_iterator()
       x_valid_shuffle, y_valid_shuffle = self.iterators['valid_shuffle'].get_next()
 
-    x_bicubic = tf.image.resize_bicubic(
-      x_valid_shuffle, [128, 128])
     output = self._model(x_valid_shuffle, is_training=True, reuse=True)
-    self.valid_shuffle_psnr = psnr(y_valid_shuffle, output) - psnr(y_valid_shuffle, x_bicubic)
+    self.valid_shuffle_psnr = psnr(y_valid_shuffle, output)
 
   def connect_controller(self, controller_model):
     if self.fixed_arc is None:

@@ -11,6 +11,7 @@ import tensorflow as tf
 from src.sr.models import Model
 from src.sr.image_ops import conv
 from src.sr.image_ops import fully_connected
+from src.sr.image_ops import relu
 from src.sr.image_ops import batch_norm
 from src.sr.image_ops import batch_norm_with_mask
 from src.sr.image_ops import max_pool
@@ -23,7 +24,7 @@ from src.utils import get_train_ops
 from src.utils import psnr
 from src.common_ops import create_weight
 
-class MicroChild(Model):
+class ResidualChild(Model):
   def __init__(self,
                datasets,
                use_aux_heads=False,
@@ -56,6 +57,7 @@ class MicroChild(Model):
                name="child",
                mean=127,
                std=127,
+               leaky=0.1,
                **kwargs
               ):
     """
@@ -102,6 +104,7 @@ class MicroChild(Model):
     self.fixed_arc = fixed_arc
     self.mean = mean
     self.std = std
+    self.leaky = leaky
 
     self.global_step = tf.Variable(
       0, dtype=tf.int32, trainable=False, name="global_step")
@@ -221,12 +224,12 @@ class MicroChild(Model):
       if hw[0] != hw[1]:
         assert hw[0] == 2 * hw[1]
         with tf.variable_scope("pool_x"):
-          #x = tf.nn.relu(x)
+          x = relu(x, self.leaky)
           x = self._factorized_reduction(x, out_filters, 2, is_training)
       elif c[0] != out_filters:
         with tf.variable_scope("pool_x"):
           w = create_weight("w", [1, 1, c[0], out_filters])
-          #x = tf.nn.relu(x)
+          x = relu(x, self.leaky)
           x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                            data_format=self.data_format)
           x = batch_norm(x, is_training, data_format=self.data_format)
@@ -235,7 +238,7 @@ class MicroChild(Model):
       if c[1] != out_filters:
         with tf.variable_scope("pool_y"):
           w = create_weight("w", [1, 1, c[1], out_filters])
-          #y = tf.nn.relu(y)
+          y = relu(y, self.leaky)
           y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                            data_format=self.data_format)
           y = batch_norm(y, is_training, data_format=self.data_format)
@@ -289,13 +292,6 @@ class MicroChild(Model):
           print("Layer {0:>2d}: {1}".format(layer_id, x))
           layers = [layers[-1], x]
 
-      with tf.variable_scope("global_conv"):
-        w = create_weight("w", [3, 3, out_filters, out_filters])
-        x = tf.nn.conv2d(
-          x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-        x = batch_norm(x, is_training, data_format=self.data_format)
-      x = x + stem_out
-
       with tf.variable_scope("upsample_1"):
         w = create_weight("w", [3, 3, out_filters, out_filters * 4])
         x = tf.nn.conv2d(
@@ -307,14 +303,12 @@ class MicroChild(Model):
         x = tf.nn.conv2d(
           x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
         x = pixel_shuffler(x)
+        x = x + tf.image.resize_bicubic(stem_out, [128, 128])
 
       with tf.variable_scope("output"):
         w = create_weight("w", [3, 3, out_filters, 3])
         x = tf.nn.conv2d(
           x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
-        # scale to [0, 255]
-        #x = tf.clip_by_value(x * self.std + self.mean, 0, 255)
-        #x = x * self.std + self.mean
     return x
 
   def _fixed_conv(self, x, f_size, out_filters, stride, is_training,
@@ -335,7 +329,7 @@ class MicroChild(Model):
       with tf.variable_scope("sep_conv_{}".format(conv_id)):
         w_depthwise = create_weight("w_depth", [f_size, f_size, inp_c, 1])
         w_pointwise = create_weight("w_point", [1, 1, inp_c, out_filters])
-        #x = tf.nn.relu(x)
+        x = relu(x, self.leaky)
         x = tf.nn.separable_conv2d(
           x,
           depthwise_filter=w_depthwise,
@@ -396,7 +390,7 @@ class MicroChild(Model):
       x = layers[1]
       inp_c = self._get_C(x)
       w = create_weight("w", [1, 1, inp_c, out_filters])
-      #x = tf.nn.relu(x)
+      x = relu(x, self.leaky)
       x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                        data_format=self.data_format)
       x = batch_norm(x, is_training, data_format=self.data_format)
@@ -427,7 +421,7 @@ class MicroChild(Model):
                 data_format=self.actual_data_format)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              #x = tf.nn.relu(x)
+              x = relu(x, self.leaky)
               x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               x = batch_norm(x, is_training, data_format=self.data_format)
@@ -438,7 +432,7 @@ class MicroChild(Model):
               x = self._factorized_reduction(x, out_filters, 2, is_training)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              #x = tf.nn.relu(x)
+              x = relu(x, self.leaky)
               x = tf.nn.conv2d(x, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
               x = batch_norm(x, is_training, data_format=self.data_format)
           if (x_op in [0, 1, 2, 3] and
@@ -467,7 +461,7 @@ class MicroChild(Model):
                 data_format=self.actual_data_format)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              #y = tf.nn.relu(y)
+              y = relu(y, self.leaky)
               y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               y = batch_norm(y, is_training, data_format=self.data_format)
@@ -478,7 +472,7 @@ class MicroChild(Model):
               y = self._factorized_reduction(y, out_filters, 2, is_training)
             if inp_c != out_filters:
               w = create_weight("w", [1, 1, inp_c, out_filters])
-              #y = tf.nn.relu(y)
+              y = relu(y, self.leaky)
               y = tf.nn.conv2d(y, w, [1, 1, 1, 1], "SAME",
                                data_format=self.data_format)
               y = batch_norm(y, is_training, data_format=self.data_format)
@@ -510,7 +504,7 @@ class MicroChild(Model):
             "w", [num_possible_inputs, avg_pool_c * out_filters])
           w = w[prev_cell]
           w = tf.reshape(w, [1, 1, avg_pool_c, out_filters])
-          #avg_pool = tf.nn.relu(avg_pool)
+          avg_pool = relu(avg_pool, self.leaky)
           avg_pool = tf.nn.conv2d(avg_pool, w, strides=[1, 1, 1, 1],
                                   padding="SAME", data_format=self.data_format)
           avg_pool = batch_norm(avg_pool, is_training=True,
@@ -526,7 +520,7 @@ class MicroChild(Model):
             "w", [num_possible_inputs, max_pool_c * out_filters])
           w = w[prev_cell]
           w = tf.reshape(w, [1, 1, max_pool_c, out_filters])
-          #max_pool = tf.nn.relu(max_pool)
+          max_pool = relu(max_pool, self.leaky)
           max_pool = tf.nn.conv2d(max_pool, w, strides=[1, 1, 1, 1],
                                   padding="SAME", data_format=self.data_format)
           max_pool = batch_norm(max_pool, is_training=True,
@@ -538,7 +532,7 @@ class MicroChild(Model):
         w = create_weight("w", [num_possible_inputs, x_c * out_filters])
         w = w[prev_cell]
         w = tf.reshape(w, [1, 1, x_c, out_filters])
-        #x = tf.nn.relu(x)
+        x = relu(x, self.leaky)
         x = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME",
                          data_format=self.data_format)
         x = batch_norm(x, is_training=True, data_format=self.data_format)
@@ -589,7 +583,7 @@ class MicroChild(Model):
             scale = scale[prev_cell]
 
           # the computations
-          #x = tf.nn.relu(x)
+          x = relu(x, self.leaky)
           x = tf.nn.separable_conv2d(
             x,
             depthwise_filter=w_depthwise,
@@ -665,7 +659,7 @@ class MicroChild(Model):
       w = create_weight("w", [self.num_cells + 2, out_filters * out_filters])
       w = tf.gather(w, indices, axis=0)
       w = tf.reshape(w, [1, 1, num_outs * out_filters, out_filters])
-      #out = tf.nn.relu(out)
+      out = relu(out, self.leaky)
       out = tf.nn.conv2d(out, w, strides=[1, 1, 1, 1], padding="SAME",
                          data_format=self.data_format)
       out = batch_norm(out, is_training=True, data_format=self.data_format)
