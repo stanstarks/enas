@@ -19,14 +19,12 @@ from src.utils import DEFINE_integer
 from src.utils import DEFINE_string
 from src.utils import print_user_flags
 
-from src.cifar10.data_utils import read_data
-from src.cifar10.general_controller import GeneralController
-from src.cifar10.general_child import GeneralChild
+from src.keypoint.data_utils import read_data
+from src.keypoint.general_controller import GeneralController
+from src.keypoint.general_child import GeneralChild
 
-from src.cifar10.micro_controller import MicroController
-from src.cifar10.micro_child import MicroChild
-
-from src.conv.profiler import count_flops
+from src.keypoint.micro_controller import MicroController
+from src.keypoint.micro_child import MicroChild
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -317,8 +315,6 @@ def train():
                   normal_arc, reduce_arc = arc
                   print(np.reshape(normal_arc, [-1]))
                   print(np.reshape(reduce_arc, [-1]))
-                  print('FLOPS factor: %.1fK' % (count_flops(
-                    normal_arc, reduce_arc, FLAGS.child_num_layers)) / 1000.0)
                 else:
                   start = 0
                   for layer_id in range(FLAGS.child_num_layers):
