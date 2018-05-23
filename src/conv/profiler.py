@@ -40,11 +40,11 @@ def _flops_cell(arc, incs, outc, w, h, num_cells=5):
     else:
       inc = outc
     op = arc[2 * cell_id + 1]
-    if op in [0, 1]:
+    if op in [0, 1, 2]:
       flops += _sep(op, inc, outc, w, h)
-    elif op in [2, 3]:
+    elif op in [3, 4]:
       flops += _pool(inc, outc, w, h)
-    else:
+    elif op in [5]:
       flops += _id(inc, outc, w, h)
     c = (num_cells + 2 - len(used)) * outc
   return flops, c
