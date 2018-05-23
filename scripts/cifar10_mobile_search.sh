@@ -2,12 +2,12 @@
 
 export PYTHONPATH="$(pwd)"
 
-CUDA_VISIBLE_DEVICES=1 python src/cifar10/main.py \
+LD_LIBRARY_PATH=/home/stan/lib/cudnn-9.1-v7/lib64:$LD_LIBRARY_PATH CUDA_VISIBLE_DEVICES=0 python src/cifar10/main.py \
   --data_format="NCHW" \
   --search_for="mobile" \
   --reset_output_dir \
   --data_path="data/cifar10" \
-  --output_dir="mobile_search" \
+  --output_dir="outputs/mobile_search" \
   --batch_size=160 \
   --num_epochs=150 \
   --log_every=50 \

@@ -583,7 +583,7 @@ class MobileChild(Model):
                  stack_conv=2, variable_scope='0'):
     """Performs an enas convolution specified by the relevant parameters."""
 
-    with tf.variable_scope("conv_{0}x{0}_{1}".format((filter_size, variable_scope))):
+    with tf.variable_scope("conv_{0}x{0}_{1}".format(filter_size, variable_scope)):
       num_possible_inputs = curr_cell + 2
       for conv_id in range(stack_conv):
         with tf.variable_scope("stack_{0}".format(conv_id)):

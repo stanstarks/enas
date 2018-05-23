@@ -26,6 +26,9 @@ from src.cifar10.general_child import GeneralChild
 from src.cifar10.micro_controller import MicroController
 from src.cifar10.micro_child import MicroChild
 
+from src.cifar10.mobile_controller import MobileController
+from src.cifar10.mobile_child import MobileChild
+
 from src.conv.profiler import count_flops
 
 flags = tf.app.flags
@@ -35,7 +38,7 @@ DEFINE_boolean("reset_output_dir", False, "Delete output_dir if exists.")
 DEFINE_string("data_path", "", "")
 DEFINE_string("output_dir", "", "")
 DEFINE_string("data_format", "NHWC", "'NHWC' or 'NCWH'")
-DEFINE_string("search_for", None, "Must be [macro|micro]")
+DEFINE_string("search_for", None, "Must be [macro|micro|mobile]")
 
 DEFINE_integer("batch_size", 32, "")
 
@@ -104,6 +107,9 @@ def get_ops(images, labels):
   if FLAGS.search_for == "micro":
     ControllerClass = MicroController
     ChildClass = MicroChild
+  elif FLAGS.search_for == "mobile":
+    ControllerClass = MobileController
+    ChildClass = MobileChild
   else:
     ControllerClass = GeneralController
     ChildClass = GeneralChild
