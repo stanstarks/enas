@@ -247,3 +247,10 @@ def log10(x):
   numerator = tf.log(x)
   denominator = tf.log(tf.constant(10, dtype=numerator.dtype))
   return numerator / denominator
+
+def psnr(target, output):
+  scaled = output * 127 + 127
+  mse = tf.reduce_mean(tf.squared_difference(target, scaled))
+  psnr = tf.constant(255**2, dtype=tf.float32) / mse
+  psnr = tf.constant(10, dtype=tf.float32) * log10(psnr)
+  return psnr

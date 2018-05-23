@@ -20,11 +20,10 @@ from src.utils import DEFINE_string
 from src.utils import print_user_flags
 
 from src.sr.data_utils import read_data
-from src.sr.general_controller import GeneralController
-from src.sr.general_child import GeneralChild
 
 from src.sr.micro_controller import MicroController
 from src.sr.micro_child import MicroChild
+from src.sr.residual_child import ResidualChild
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -33,7 +32,7 @@ DEFINE_boolean("reset_output_dir", False, "Delete output_dir if exists.")
 DEFINE_string("data_path", "", "")
 DEFINE_string("output_dir", "", "")
 DEFINE_string("data_format", "NHWC", "'NHWC' or 'NCWH'")
-DEFINE_string("search_for", None, "Must be [macro|micro]")
+DEFINE_string("search_for", None, "Must be [residual|micro]")
 
 DEFINE_integer("batch_size", 32, "")
 
@@ -105,8 +104,8 @@ def get_ops(datasets):
     ControllerClass = MicroController
     ChildClass = MicroChild
   else:
-    ControllerClass = GeneralController
-    ChildClass = GeneralChild
+    ControllerClass = MicroController
+    ChildClass = ResidualChild
 
   child_model = ChildClass(
     datasets,
@@ -271,7 +270,7 @@ def train():
             log_string += "epoch={:<6d}".format(epoch)
             log_string += "ch_step={:<6d}".format(global_step)
             log_string += " loss={:<8.6f}".format(loss)
-            log_string += " lr={:<8.4f}".format(lr)
+            log_string += " lr={:<8.6f}".format(lr)
             log_string += " |g|={:<8.4f}".format(gn)
             log_string += " tr_psnr={:<8.6f}".format(tr_psnr)
             log_string += " mins={:<10.2f}".format(
@@ -317,7 +316,7 @@ def train():
                   controller_ops["sample_arc"],
                   controller_ops["valid_psnr"],
                 ])
-                if FLAGS.search_for == "micro":
+                if FLAGS.search_for != "macro":
                   normal_arc, reduce_arc = arc
                   print(np.reshape(normal_arc, [-1]))
                   print(np.reshape(reduce_arc, [-1]))

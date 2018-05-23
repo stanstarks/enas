@@ -69,7 +69,8 @@ class Model(object):
     print "Build data ops"
     with tf.device("/cpu:0"):
       # training data
-      self.num_train_examples = 92165
+      #self.num_train_examples = 92165
+      self.num_train_examples = 20000
       self.num_train_batches = (
         self.num_train_examples + self.batch_size - 1) // self.batch_size
 
@@ -86,7 +87,7 @@ class Model(object):
       # valid data
       self.x_valid, self.y_valid = None, None
       if datasets["valid"] is not None:
-        self.num_valid_examples = 20000
+        self.num_valid_examples = 10000
         self.num_valid_batches = (
           (self.num_valid_examples + self.eval_batch_size - 1)
           // self.eval_batch_size)
@@ -135,18 +136,20 @@ class Model(object):
     else:
       raise NotImplementedError("Unknown eval_set '{}'".format(eval_set))
 
-    total_acc = 0
+    total_psnr = 0
     total_exp = 0
+    num_batches /= 20 # don't evaluate on whole dataset to decrease training time
     for batch_id in xrange(num_batches):
-      acc = sess.run(acc_op, feed_dict=feed_dict)
-      total_acc += acc
-      total_exp += self.eval_batch_size
+      psnr = sess.run(acc_op, feed_dict=feed_dict)
+      total_psnr += psnr
+      #total_exp += self.eval_batch_size
+      total_exp += 1
       if verbose:
-        sys.stdout.write("\r{:<5d}/{:>5d}".format(total_acc, total_exp))
+        sys.stdout.write("\r{:<5d}/{:>5d}".format(total_psnr, total_exp))
     if verbose:
       print ""
     print "{}_psnr: {:<6.4f}".format(
-      eval_set, float(total_acc) / total_exp)
+      eval_set, float(total_psnr) / total_exp)
 
   def _model(self, inputs, is_training, reuse=None):
     raise NotImplementedError("Abstract method")
