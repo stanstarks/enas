@@ -315,10 +315,12 @@ def train():
                 ])
                 if FLAGS.search_for == "micro":
                   normal_arc, reduce_arc = arc
-                  print(np.reshape(normal_arc, [-1]))
-                  print(np.reshape(reduce_arc, [-1]))
+                  normal_arc = np.reshape(normal_arc, [-1])
+                  print(normal_arc)
+                  reduce_arc = np.reshape(reduce_arc, [-1])
+                  print(reduce_arc)
                   print('FLOPS factor: %.1fK' % (count_flops(
-                    normal_arc, reduce_arc, FLAGS.child_num_layers)) / 1000.0)
+                    normal_arc, reduce_arc, FLAGS.child_num_layers) / 1000.0))
                 else:
                   start = 0
                   for layer_id in range(FLAGS.child_num_layers):

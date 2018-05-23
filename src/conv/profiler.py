@@ -62,7 +62,7 @@ def count_flops(normal_arc, reduce_arc, num_layers):
   outc = 1
   for layer in range(num_layers + 2):
     if layer not in pool_layers:
-      flops, c += _flops_cell(normal_arc, incs, outc, w, h)
+      flops, c = _flops_cell(normal_arc, incs, outc, w, h)
       total_flops += flops
     else:
       # skipping reduction and calibration
@@ -70,10 +70,15 @@ def count_flops(normal_arc, reduce_arc, num_layers):
       incs = [outc, outc]
       w /= 2
       h /= 2
-      flops, c += _flops_cell(reduce_arc, incs, outc, w, h)
+      flops, c = _flops_cell(reduce_arc, incs, outc, w, h)
       total_flops += flops
     incs = [incs[-1], c]
   return total_flops
 
 
-
+if __name__ == '__main__':
+  import numpy as np
+  normal_arc = np.array([0, 2, 0, 0, 0, 4, 0, 1, 0, 4, 1, 1, 1, 0, 0, 1, 0, 2, 1, 1])
+  reduce_arc = np.array([1, 0, 1, 0, 0, 3, 0, 2, 1, 1, 3, 1, 1, 0, 0, 4, 0, 3, 1, 1])
+  print('FLOPS factor: %.1fK' % (count_flops(
+    normal_arc, reduce_arc, 6) / 1000.0))
