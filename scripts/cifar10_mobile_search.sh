@@ -8,7 +8,7 @@ LD_LIBRARY_PATH=/home/stan/lib/cudnn-9.1-v7/lib64:$LD_LIBRARY_PATH CUDA_VISIBLE_
   --reset_output_dir \
   --data_path="data/cifar10" \
   --output_dir="outputs/mobile_search" \
-  --batch_size=160 \
+  --batch_size=100 \
   --num_epochs=150 \
   --log_every=50 \
   --eval_every_epochs=1 \

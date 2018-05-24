@@ -319,7 +319,7 @@ def train():
                   controller_ops["sample_arc"],
                   controller_ops["valid_acc"],
                 ])
-                if FLAGS.search_for == "micro":
+                if FLAGS.search_for != "macro":
                   normal_arc, reduce_arc = arc
                   normal_arc = np.reshape(normal_arc, [-1])
                   print(normal_arc)

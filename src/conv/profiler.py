@@ -12,9 +12,9 @@ def _flops_cell(arc, incs, outc, w, h, num_cells=5):
   6: inverted bn 20
   """
   def _sep(op, inc, outc, w, h):
-    if op == 0:
+    if op < 2:
       return (9 + outc) * inc * w * h
-    if op == 1:
+    else:
       return (25 + outc) * inc * w * h
 
   def _pool(inc, outc, w, h):
@@ -46,7 +46,12 @@ def _flops_cell(arc, incs, outc, w, h, num_cells=5):
       flops += _pool(inc, outc, w, h)
     elif op in [5]:
       flops += _id(inc, outc, w, h)
-    c = (num_cells + 2 - len(used)) * outc
+    else:
+      # check dropped
+      if cell_id % 2 == 1 and arc[2 * cell_id - 1] == 6:
+        if cell_id // 2 not in used:
+          used.append(cell_id // 2)
+  c = (num_cells + 2 - len(used)) * outc
   return flops, c
 
 
@@ -78,7 +83,7 @@ def count_flops(normal_arc, reduce_arc, num_layers):
 
 if __name__ == '__main__':
   import numpy as np
-  normal_arc = np.array([0, 2, 0, 0, 0, 4, 0, 1, 0, 4, 1, 1, 1, 0, 0, 1, 0, 2, 1, 1])
+  normal_arc = np.array([0, 2, 0, 5, 0, 4, 0, 1, 0, 6, 0, 6, 1, 1, 0, 1, 0, 2, 1, 1])
   reduce_arc = np.array([1, 0, 1, 0, 0, 3, 0, 2, 1, 1, 3, 1, 1, 0, 0, 4, 0, 3, 1, 1])
   print('FLOPS factor: %.1fK' % (count_flops(
     normal_arc, reduce_arc, 6) / 1000.0))
