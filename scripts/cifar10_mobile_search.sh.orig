@@ -8,7 +8,11 @@ python src/cifar10/main.py \
   --reset_output_dir \
   --data_path="data/cifar10" \
   --output_dir="outputs/mobile_search" \
+<<<<<<< HEAD
+  --batch_size=120 \
+=======
   --batch_size=100 \
+>>>>>>> 9452bc82ac5c9940352994fef64ae8ca932a1250
   --num_epochs=150 \
   --log_every=50 \
   --eval_every_epochs=1 \
