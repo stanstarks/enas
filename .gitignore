@@ -1,6 +1,7 @@
 # project related
 .flake8
 data/*
+slurm-*
 
 outputs*
 outputs/*
