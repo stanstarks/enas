@@ -5,11 +5,10 @@ export PYTHONPATH="$(pwd)"
 python src/cifar10/main.py \
   --data_format="NCHW" \
   --search_for="mobile" \
-  --reset_output_dir \
   --data_path="data/cifar10" \
-  --output_dir="outputs/mobile_search" \
+  --output_dir="outputs/mobile_layer0" \
   --batch_size=120 \
-  --num_epochs=150 \
+  --num_epochs=300 \
   --log_every=50 \
   --eval_every_epochs=1 \
   --child_use_aux_heads \

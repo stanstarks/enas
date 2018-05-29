@@ -275,7 +275,7 @@ class MobileChild(Model):
             out_filters *= 2
             if self.fixed_arc is None:
               x = self._factorized_reduction(x, out_filters, 2, is_training)
-              layers = [layers[-1], x]
+              layers = [layers[0], x]
               x = self._enas_layer(
                 layer_id, layers, self.reduce_arc, out_filters)
             else:

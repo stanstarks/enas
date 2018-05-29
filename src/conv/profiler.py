@@ -4,12 +4,13 @@ def _flops_cell(arc, incs, outc, w, h, num_cells=5):
 
   There are 5 op types:
   0: sep3x3 1
-  1: sep5x5 2
-  2: avg3x3 1
-  3: max3x3 1
-  4: id 0
-  5: bottleneck 5
-  6: inverted bn 20
+  1: sep3x3 1
+  2: sep5x5 2
+  3: avg3x3 1
+  4: max3x3 1
+  5: id 0
+  6: empty
+  7: inverted bn 20 not implemented
   """
   def _sep(op, inc, outc, w, h):
     if op < 2:
