@@ -56,6 +56,10 @@ def _flops_cell(arc, incs, outc, w, h, num_cells=5):
   return flops, c
 
 
+def _calibration(inc, outc, w, h):
+  return inc * outc * w * h
+
+
 def count_flops(normal_arc, reduce_arc, num_layers):
   """Count FLOPs of enas model.
   Reductions and calibrations are ignored."""
@@ -64,27 +68,33 @@ def count_flops(normal_arc, reduce_arc, num_layers):
   pool_distance = num_layers // 3
   pool_layers = [pool_distance, 2 * pool_distance + 1]
   # first input has width 3 * out_filters
-  incs = [3, 3]
   outc = 1
+  # apply calibration outside enas layer to save computations
+  total_flops += _calibration(3, outc, w, h)
+  incs = [outc, outc]
   for layer in range(num_layers + 2):
     if layer not in pool_layers:
       flops, c = _flops_cell(normal_arc, incs, outc, w, h)
       total_flops += flops
     else:
-      # skipping reduction and calibration
       outc *= 2
-      incs = [outc, outc]
       w /= 2
       h /= 2
+      total_flops += 2 * _calibration(incs[0], outc, w, h)
+      incs = [outc, outc]
       flops, c = _flops_cell(reduce_arc, incs, outc, w, h)
       total_flops += flops
-    incs = [incs[-1], c]
+    # apply calibration following enas output to save computations
+    total_flops += _calibration(c, outc, w, h)
+    incs = [incs[-1], outc]
   return total_flops
 
 
 if __name__ == '__main__':
   import numpy as np
-  normal_arc = np.array([0, 2, 0, 5, 0, 4, 0, 1, 0, 6, 0, 6, 1, 1, 0, 1, 0, 2, 1, 1])
-  reduce_arc = np.array([1, 0, 1, 0, 0, 3, 0, 2, 1, 1, 3, 1, 1, 0, 0, 4, 0, 3, 1, 1])
+  # normal_arc = np.array([1, 6, 0, 1, 1, 0, 0, 6, 1, 1, 0, 4, 0, 0, 4, 1, 0, 4, 1, 4])
+  # reduce_arc = np.array([0, 5, 1, 1, 1, 6, 0, 2, 0, 5, 0, 3, 0, 0, 0, 5, 2, 3, 0, 1])
+  normal_arc = [1, 1, 0, 4, 1, 4, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 2, 1, 0]
+  reduce_arc = [1, 5, 0, 1, 1, 2, 0, 4, 3, 1, 0, 3, 1, 1, 0, 2, 1, 1, 0, 2]
   print('FLOPS factor: %.1fK' % (count_flops(
     normal_arc, reduce_arc, 6) / 1000.0))
