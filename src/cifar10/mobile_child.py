@@ -721,6 +721,9 @@ class MobileChild(Model):
     self.train_acc = tf.to_int32(self.train_acc)
     self.train_acc = tf.reduce_sum(self.train_acc)
 
+    # quantization
+    tf.contrib.quantize.create_training_graph(quant_delay=0)
+
     tf_variables = [
       var for var in tf.trainable_variables() if (
         var.name.startswith(self.name) and "aux_head" not in var.name)]
