@@ -34,6 +34,12 @@ def DEFINE_boolean(name, default_value, doc_string):
   user_flags.append(name)
 
 
+def DEFINE_multi_integer(name, default_value, doc_string):
+  tf.app.flags.DEFINE_multi_integer(name, default_value, doc_string)
+  global user_flags
+  user_flags.append(name)
+
+
 def print_user_flags(line_limit=80):
   print("-" * 80)
 
